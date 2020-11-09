@@ -3,7 +3,9 @@ const app = express();
 
 const cors = require('cors')
 
-const morgan = require('morgan')
+const morgan = require('morgan');
+
+const isContains = require('./utl');
 
 require('dotenv').config()
 const port = process.env.PORT || 3000
@@ -82,10 +84,6 @@ const generateId = (arr) => {
     ? Math.max(...arr.map(a => a.id))
     : 0
   return maxId + 1
-}
-
-const isContains = (arr, keyWord, item) => {
-  return arr.some(a => a[keyWord] === item)
 }
 
 app.post('/api/person/', (request, response) => {
