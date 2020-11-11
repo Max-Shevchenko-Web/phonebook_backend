@@ -25,6 +25,10 @@ morgan.token('body', (req) => JSON.stringify(req.body))
 
 app.use(morgan(':body :method :url :response-time'))
 
+app.get('/', (request, response) => {
+  response.send('<h1>If you can see this, something went wrong!</h1>')
+})
+
 // GET all people
 app.get('/api/persons', (req, res) => {
   Person.find({}).then((persons) => {
