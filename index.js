@@ -25,6 +25,7 @@ morgan.token('body', (req) => JSON.stringify(req.body))
 
 app.use(morgan(':body :method :url :response-time'))
 
+// Get UI from build
 app.get('/', (request, response) => {
   response.send('<h1>If you can see this, something went wrong!</h1>')
 })
