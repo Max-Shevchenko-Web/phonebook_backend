@@ -1,123 +1,117 @@
 const express = require('express')
-const app = express();
+
+const app = express()
 
 const cors = require('cors')
 
+require('dotenv').config()
+
 const morgan = require('morgan')
 
-require('dotenv').config()
+// eslint-disable-next-line no-unused-vars
+const isContains = require('./utl')
+
+const Person = require('./models/person')
+
 const port = process.env.PORT || 3000
 
-let persons = [
-  {
-    "name": "Arto Hellas",
-    "number": "040-123456",
-    "id": 1
-  },
-  {
-    "name": "Ada Lovelace",
-    "number": "39-44-5323523",
-    "id": 2
-  },
-  {
-    "name": "Dan Abramov",
-    "number": "12-43-234345",
-    "id": 3
-  },
-  {
-    "name": "Mary Poppendieck",
-    "number": "39-23-6423122",
-    "id": 4
-  }
-]
-
-// Промежуточное ПО - это функция, которая получает три параметра:
-// custom midleware
-// const requestLogger = (request, response, next) => {
-//   console.log('Method:', request.method)
-//   console.log('Path:  ', request.path)
-//   console.log('Body:  ', request.body)
-//   console.log('---')
-//   next()
-// }
 app.use(cors())
+
+app.use(express.static('build'))
 
 app.use(express.json())
 
-// morgan
-// app.use(morgan('tiny'))
-
-morgan.token('body', function getId (req) {
-  return JSON.stringify(req.body)
-})
+morgan.token('body', (req) => JSON.stringify(req.body))
 
 app.use(morgan(':body :method :url :response-time'))
 
-// app.use(requestLogger)
-
-app.get('/api/person', (req, res) => {
-  res.json(persons)
+// Get UI from build
+app.get('/', (request, response) => {
+  response.send('<h1>If you can see this, something went wrong!</h1>')
 })
 
-app.get('/api/people/:id', (req, res) => {
-  const id = Number(req.params.id)
-  const person = persons.find(person => person.id === id)
+// GET all people
+app.get('/api/persons', (req, res) => {
+  Person.find({}).then((persons) => {
+    res.json(persons)
+  })
+})
 
-  if (person) {
-    res.json(person)
-  } else {
-    res.status(404).end()
-  }
+// search by id
+app.get('/api/persons/:id', (req, res, next) => {
+  Person.findById(req.params.id).then((person) => {
+    if (person) {
+      res.json(person)
+    } else {
+      res.status(404).end()
+    }
+  })
+    .catch((error) => next(error))
 })
 
 app.get('/api/info', (req, res) => {
-  res.send(`
-    <p>Phonebook has info ${persons.length - 1}</p>
-    <p>${new Date()}</p>
-  `)
+  Person.find({}).then((persons) => {
+    res.send(`
+      <p>Phonebook contains information about ${persons.length} people</p>
+      <p>${new Date()}</p>
+    `)
+  })
 })
 
-const generateId = (arr) => {
-  const maxId = arr.length > 0
-    ? Math.max(...arr.map(a => a.id))
-    : 0
-  return maxId + 1
-}
-
-const isContains = (arr, keyWord, item) => {
-  return arr.some(a => a[keyWord] === item)
-}
-
-app.post('/api/person/', (request, response) => {
-  const body  = request.body;
-  if (!body.name ||!body.number) {
+// eslint-disable-next-line consistent-return
+app.post('/api/persons/', (request, response, next) => {
+  const { body } = request
+  if (!body.name || !body.number) {
     return response.status(400).json({
-      error: 'content missing'
+      error: 'content missing',
     })
   }
+  // check for matches in the database
+  Person.find({}).then(() => {
+    // custom uniqueness validator
+    // if (isContains(persons, 'name', body.name)) {
+    //   return response.status(400).json({ error: 'name must be unique' })
+    // }
+    // if (isContains(persons, 'number', body.number)) {
+    //   return response.status(400).json({ error: 'number must be unique' })
+    // }
 
-if (isContains(persons, 'name', body.name)) {
-  return response.status(400).json({ error: 'name must be unique' })
-}
-if (isContains(persons, 'number', body.number)) {
-  return response.status(400).json({ error: 'number must be unique' })
-}
+    // If unique, then create a new record in the DB
+    const person = new Person({
+      name: body.name,
+      number: body.number,
+    })
 
+    person.save().then((savedPerson) => {
+      response.json(savedPerson)
+    })
+      .catch((error) => next(error))
+  })
+})
+
+// PUT
+app.put('/api/persons/:id', (req, res, next) => {
+  const { body } = req
 
   const person = {
     name: body.name,
     number: body.number,
-    id: generateId(persons),
   }
 
-  persons = persons.concat(person)
-  response.json(person)
+  // new: true - indicates that db will return an updated object
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then((updatedPerson) => {
+      res.json(updatedPerson)
+    })
+    .catch((error) => next(error))
 })
 
-app.delete('/api/people/:id', (req, res) => {
-  const id = Number(req.params.id)
-  persons = persons.filter(person => person.id !== id)
-  res.status(204).end()
+app.delete('/api/persons/:id', (req, res, next) => {
+  Person.findByIdAndRemove(req.params.id)
+    .then(() => {
+      res.status(204).end()
+    })
+    .catch((error) => next(error))
 })
 
 const unknownEndpoint = (request, response) => {
@@ -126,5 +120,19 @@ const unknownEndpoint = (request, response) => {
 
 app.use(unknownEndpoint)
 
-app.listen(port, () => console.log(`server on: ${port}`))
+// eslint-disable-next-line consistent-return
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
 
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  } if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+app.use(errorHandler)
+
+app.listen(port, () => console.log(`server on: ${port}`))
